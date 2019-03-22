@@ -23,6 +23,10 @@ except ImportError:  # pragma: no cover
 
 
 class MongoDBSessionInterface(BaseSessionInterface):
+    expiry_field = 'expiry'
+    sid_field = 'sid'
+    data_field = 'data'
+
     def __init__(
             self, app, coll: str = 'session',
             domain: str = None,
@@ -109,24 +113,24 @@ class MongoDBSessionInterface(BaseSessionInterface):
                 expiry:
                     For document expiration.
             """
-            await _SessionModel.create_index('sid')
-            await _SessionModel.create_index('expiry', expireAfterSeconds=0)
+            await _SessionModel.create_index(self.sid_field)
+            await _SessionModel.create_index(self.expiry_field, expireAfterSeconds=0)
 
     async def _get_value(self, prefix, key):
-        value = await _SessionModel.find_one({'sid': key}, as_raw=True)
-        return value['data'] if value else None
+        value = await _SessionModel.find_one({self.sid_field: key}, as_raw=True)
+        return value[self.data_field] if value else None
 
     async def _delete_key(self, key):
-        await _SessionModel.delete_one({'sid': key})
+        await _SessionModel.delete_one({self.sid_field: key})
 
     async def _set_value(self, key, data):
         expiry = datetime.utcnow() + timedelta(seconds=self.expiry)
         await _SessionModel.replace_one(
-            {'sid': key},
+            {self.sid_field: key},
             {
-                'sid': key,
-                'expiry': expiry,
-                'data': data
+                self.sid_field: key,
+                self.expiry_field: expiry,
+                self.data_field: data
             },
             upsert=True
         )

@@ -1,6 +1,6 @@
 import time
 import abc
-import ujson
+import ujson as json
 import uuid
 from sanic_session.utils import CallbackDict
 
@@ -81,6 +81,18 @@ class BaseSessionInterface(metaclass=abc.ABCMeta):
         '''Set value for datastore'''
         raise NotImplementedError
 
+    @classmethod
+    def _gen_sid(cls):
+        return uuid.uuid4().hex
+
+    @classmethod
+    def _pack(cls, session):
+        return json.dumps(dict(session))
+
+    @classmethod
+    def _unpack(cls, value):
+        return json.loads(value)
+
     async def open(self, request) -> SessionDict:
         """
         Opens a session onto the request. Restores the client's session
@@ -100,13 +112,13 @@ class BaseSessionInterface(metaclass=abc.ABCMeta):
         sid = request.cookies.get(self.cookie_name)
 
         if not sid:
-            sid = uuid.uuid4().hex
+            sid = self._gen_sid()
             session_dict = SessionDict(sid=sid)
         else:
             val = await self._get_value(self.prefix, sid)
 
             if val is not None:
-                data = ujson.loads(val)
+                data = self._unpack(val)
                 session_dict = SessionDict(data, sid=sid)
             else:
                 session_dict = SessionDict(sid=sid)
@@ -128,7 +140,7 @@ class BaseSessionInterface(metaclass=abc.ABCMeta):
         Returns:
             None
         """
-        if 'session' not in request:
+        if self.session_name not in request:
             return
 
         key = (self.prefix + request[self.session_name].sid)
@@ -139,6 +151,6 @@ class BaseSessionInterface(metaclass=abc.ABCMeta):
                 self._delete_cookie(request, response)
             return
 
-        val = ujson.dumps(dict(request[self.session_name]))
+        val = self._pack(request[self.session_name])
         await self._set_value(key, val)
         self._set_cookie_props(request, response)
