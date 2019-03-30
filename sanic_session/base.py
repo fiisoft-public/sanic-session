@@ -81,16 +81,13 @@ class BaseSessionInterface(metaclass=abc.ABCMeta):
         '''Set value for datastore'''
         raise NotImplementedError
 
-    @classmethod
-    def _gen_sid(cls):
+    def _gen_sid(self):
         return uuid.uuid4().hex
 
-    @classmethod
-    def _pack(cls, session):
+    def _pack(self, session):
         return json.dumps(dict(session))
 
-    @classmethod
-    def _unpack(cls, value):
+    def _unpack(self, value):
         return json.loads(value)
 
     async def open(self, request) -> SessionDict:

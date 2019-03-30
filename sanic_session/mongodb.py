@@ -2,25 +2,6 @@ from datetime import datetime, timedelta
 from sanic_session.base import BaseSessionInterface
 import warnings
 
-try:
-    from sanic_motor import BaseModel
-
-    class _SessionModel(BaseModel):
-        """Collection for session storing.
-
-        Collection name (default session)
-
-        Fields:
-            sid
-            expiry
-            data:
-                User's session data
-        """
-        pass
-
-except ImportError:  # pragma: no cover
-    _SessionModel = None
-
 
 class MongoDBSessionInterface(BaseSessionInterface):
     expiry_field = 'expiry'
@@ -70,9 +51,25 @@ class MongoDBSessionInterface(BaseSessionInterface):
                 accessed like that: ``request['session']``
                 Default: 'session'
         """
-        if _SessionModel is None:
+        try:
+            from sanic_motor import BaseModel
+        except ImportError:  # pragma: no cover
             raise RuntimeError("Please install Mongo dependencies: "
                                "pip install sanic_session[mongo]")
+
+        class _SessionModel(BaseModel):
+            __coll__ = coll
+            """Collection for session storing.
+
+            Collection name (default session)
+
+            Fields:
+                sid
+                expiry
+                data:
+                    User's session data
+            """
+            pass
 
         # prefix not needed for mongodb as mongodb uses uuid4 natively
         prefix = ''
@@ -100,7 +97,7 @@ class MongoDBSessionInterface(BaseSessionInterface):
         )
 
         # set collection name
-        _SessionModel.__coll__ = coll
+        self.SessionModel = _SessionModel
 
         @app.listener('after_server_start')
         async def apply_session_indexes(app, loop):
@@ -117,15 +114,15 @@ class MongoDBSessionInterface(BaseSessionInterface):
             await _SessionModel.create_index(self.expiry_field, expireAfterSeconds=0)
 
     async def _get_value(self, prefix, key):
-        value = await _SessionModel.find_one({self.sid_field: key}, as_raw=True)
-        return value[self.data_field] if value else None
+        value = await self.SessionModel.find_one({self.sid_field: key}, as_raw=True)
+        return value.get(self.data_field) if value else None
 
     async def _delete_key(self, key):
-        await _SessionModel.delete_one({self.sid_field: key})
+        await self.SessionModel.delete_one({self.sid_field: key})
 
     async def _set_value(self, key, data):
         expiry = datetime.utcnow() + timedelta(seconds=self.expiry)
-        await _SessionModel.replace_one(
+        await self.SessionModel.replace_one(
             {self.sid_field: key},
             {
                 self.sid_field: key,
